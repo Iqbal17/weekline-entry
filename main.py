@@ -64,18 +64,66 @@ Pass 2 — two genuine revisions to the winner (C):
 Final entry (verified by running this program):
   "Entered 156 bounties this week, won $0, and GitHub said no more repos today."
   (76 characters)
+
+Pass 3 — revision of the program itself (the line above is frozen;
+only the machinery around it is reworked):
+
+1. The 100-character cap currently lives only in this docstring.
+   It becomes a named constant (MAX_CHARS) with a guard in main():
+   if the line ever grows past the bounty's limit, the program
+   fails loudly instead of writing an entry the grader would score
+   as invalid.
+2. Output-directory resolution moves into its own helper and
+   treats an empty MAKEFUN_OUTPUT_DIR the same as an unset one.
+   The old os.environ.get(..., "/output") would have used "" as
+   the directory and crashed; falling back to /output is the
+   behaviour the brief promises, so it should hold in both cases.
+3. Writing is split from path resolution (write_entry vs
+   output_dir) so each half can be read and checked on its own.
+   The write itself stays unchanged: the line plus one trailing
+   newline, UTF-8, creating the directory if it is missing —
+   exactly what the verified run produced.
 """
 
 import os
 
+# The bounty's hard cap: one line, at most 100 characters. The guard
+# in main() enforces it so the rule cannot silently drift away from
+# the code the way it could while it lived only in the docstring.
+MAX_CHARS = 100
+
 LINE = "Entered 156 bounties this week, won $0, and GitHub said no more repos today."
 
 
-def main() -> None:
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "entry.txt"), "w", encoding="utf-8") as f:
+def output_dir() -> str:
+    """Directory the grader reads entry.txt from.
+
+    $MAKEFUN_OUTPUT_DIR when set to a real path; an empty value
+    counts as unset and falls back to /output, which is the
+    behaviour the original version already had for the unset case.
+    """
+    return os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output"
+
+
+def write_entry(path: str) -> None:
+    """Write the frozen line, plus one trailing newline, as UTF-8.
+
+    Kept byte-for-byte identical to the original write: the grader
+    reads entry.txt, and the verified run produced exactly this.
+    """
+    with open(path, "w", encoding="utf-8") as f:
         f.write(LINE + "\n")
+
+
+def main() -> None:
+    if len(LINE) > MAX_CHARS:
+        raise SystemExit(
+            f"entry line is {len(LINE)} characters; "
+            f"the bounty caps it at {MAX_CHARS}"
+        )
+    out_dir = output_dir()
+    os.makedirs(out_dir, exist_ok=True)
+    write_entry(os.path.join(out_dir, "entry.txt"))
 
 
 if __name__ == "__main__":
